@@ -280,9 +280,14 @@
 
         const norm = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
         
+        // MODIFICACIÓN CRUCIAL: Detectar separador dinámicamente para lidiar con los tabuladores de Moodle
         const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
+            // Detectamos si el texto contiene tabulaciones. Si es así, asumimos que ese es el separador.
+            const delimiter = text.includes('\t') ? '\t' : ',';
+            
             Papa.parse(text, {
                 header: hasHeader,
+                delimiter: delimiter, // <- AQUÍ ESTÁ LA MAGIA QUE ARREGLA EL PROBLEMA
                 skipEmptyLines: true,
                 complete: res => resolve(res.data),
                 error: err => reject(err)
@@ -290,26 +295,23 @@
         });
 
         // ============================================================================
-        // NUEVA LÓGICA: Desencriptar UTF-16 de Moodle para evitar datos vacíos (0)
+        // LÓGICA: Desencriptar UTF-16 de Moodle para evitar datos vacíos
         // ============================================================================
         function decodeMoodleBuffer(buffer) {
             const view = new Uint8Array(buffer);
-            // Revisa si Moodle guardó el archivo como UTF-16LE (Little Endian)
             if (view.length >= 2 && view[0] === 0xFF && view[1] === 0xFE) {
                 return new TextDecoder('utf-16le').decode(buffer);
             } 
-            // Revisa si es UTF-16BE (Big Endian)
             else if (view.length >= 2 && view[0] === 0xFE && view[1] === 0xFF) {
                 return new TextDecoder('utf-16be').decode(buffer);
             } 
-            // Si es un CSV normal (UTF-8)
             else {
                 return new TextDecoder('utf-8').decode(buffer);
             }
         }
 
         async function fetchDecodedCSV(url) {
-            const cacheBuster = new Date().getTime(); // Truco anti-memoria caché de Github
+            const cacheBuster = new Date().getTime();
             const res = await fetch(`${url}?v=${cacheBuster}`);
             if (!res.ok) throw new Error("No encontrado");
             const buffer = await res.arrayBuffer();
@@ -320,15 +322,15 @@
             document.getElementById('loadingState').classList.remove('hidden-section');
             
             try {
-                // Descargamos y desencriptamos los formatos de Moodle al mismo tiempo
                 const [txtPart, txtProg, txtSurv] = await Promise.all([
                     fetchDecodedCSV('participantes.csv'),
                     fetchDecodedCSV('progreso.csv'),
                     fetchDecodedCSV('encuesta.csv')
                 ]);
 
+                // Pasamos los textos leídos al parser inteligente
                 const dPart = await parseCSVText(txtPart, true);
-                const dProg = await parseCSVText(txtProg, false); // header false por tabulaciones sueltas
+                const dProg = await parseCSVText(txtProg, false); 
                 const dSurv = await parseCSVText(txtSurv, true);
 
                 generarBaseGlobal(dPart, dProg, dSurv);
@@ -347,7 +349,6 @@
             }
         }
 
-        // Lógica ROBUSTA: Busca columnas por palabra clave, no por coincidencia exacta
         function generarBaseGlobal(dPart, dProg, dSurv) {
             const progHeaders = dProg[0] || [];
             const emailIdx = progHeaders.findIndex(h => h && typeof h === 'string' && h.toLowerCase().includes('correo'));
@@ -375,7 +376,6 @@
                 const fullName = `${n} ${ln}`.trim();
                 const nName = norm(fullName);
 
-                // Cruce de progreso
                 const rowProg = emailIdx >= 0 ? dProg.find(r => r[emailIdx] && r[emailIdx].toLowerCase().trim() === email) : null;
                 const rp = rowProg || [];
                 
@@ -411,7 +411,6 @@
                     }
                 });
 
-                // Cruce de encuesta
                 const rowSurv = dSurv.find(s => {
                     const sn = sNameKey && s[sNameKey] ? norm(s[sNameKey]) : '';
                     return sn === nName;
@@ -446,7 +445,6 @@
             msg.innerText = "Desencriptando y cruzando datos...";
 
             try {
-                // Función que decodifica Moodle al subir manual
                 const readFileToDecodedText = file => new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = e => resolve(decodeMoodleBuffer(e.target.result));
@@ -661,4 +659,4 @@
 
     </script>
 </body>
-</html>           
+</html>
