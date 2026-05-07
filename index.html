@@ -55,8 +55,8 @@
                 <div>
                     <h1 class="text-xl font-bold text-institucional-900 leading-tight flex items-center">
                         Introducción al financiamiento
-                        <!-- ETIQUETA V1.2 PARA VENCER A LA CACHÉ FANTASMA -->
-                        <span class="bg-institucional-100 text-institucional-700 text-[10px] px-2 py-0.5 rounded-full font-black ml-3 tracking-widest border border-institucional-500 shadow-sm">v1.2</span>
+                        <!-- ETIQUETA V1.3 PARA VERIFICAR ACTUALIZACIÓN -->
+                        <span class="bg-institucional-100 text-institucional-700 text-[10px] px-2 py-0.5 rounded-full font-black ml-3 tracking-widest border border-institucional-500 shadow-sm">v1.3</span>
                     </h1>
                     <span class="text-sm font-normal text-slate-500">de áreas protegidas</span>
                 </div>
@@ -283,21 +283,29 @@
             'Q10': '¿Te interesaría profundizar en cursos más avanzados?'
         };
 
+        // MODIFICACIÓN CRUCIAL: Limpieza profunda de correos para evitar errores de cruce
+        const cleanEmail = (email) => {
+            if (!email) return '';
+            // Quita espacios en blanco, comillas dobles que agrega Moodle a veces, y pasa a minúsculas
+            return email.toLowerCase().trim().replace(/['"]+/g, '');
+        };
+
         const norm = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
         
-        // Dejamos que PapaParse detecte automáticamente el separador (sea coma o tabulación)
         const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
+            const delimiter = text.includes('\t') ? '\t' : ',';
+            
             Papa.parse(text, {
                 header: hasHeader,
+                delimiter: delimiter,
                 skipEmptyLines: true,
+                // Le pedimos a PapaParse que limpie las comillas automáticamente
+                transform: (value) => value.replace(/^"|"$/g, '').trim(), 
                 complete: res => resolve(res.data),
                 error: err => reject(err)
             });
         });
 
-        // ============================================================================
-        // LÓGICA: Desencriptar UTF-16 de Moodle para evitar datos vacíos
-        // ============================================================================
         function decodeMoodleBuffer(buffer) {
             const view = new Uint8Array(buffer);
             if (view.length >= 2 && view[0] === 0xFF && view[1] === 0xFE) {
@@ -371,13 +379,15 @@
             const sNameKey = sKeys.find(k => k && (k.toLowerCase().includes('nombre completo') || k.toLowerCase() === 'nombre'));
 
             globalData = dPart.map(p => {
-                const email = pEmailKey && p[pEmailKey] ? p[pEmailKey].toLowerCase().trim() : '';
+                // Usamos la nueva función ultra-limpiadora de correos
+                const email = pEmailKey && p[pEmailKey] ? cleanEmail(p[pEmailKey]) : '';
                 const n = pNameKey && p[pNameKey] ? p[pNameKey] : '';
                 const ln = pLastNameKey && p[pLastNameKey] ? p[pLastNameKey] : '';
                 const fullName = `${n} ${ln}`.trim();
                 const nName = norm(fullName);
 
-                const rowProg = emailIdx >= 0 ? dProg.find(r => r[emailIdx] && r[emailIdx].toLowerCase().trim() === email) : null;
+                // Cruce de progreso usando también correos ultra-limpios
+                const rowProg = emailIdx >= 0 ? dProg.find(r => r[emailIdx] && cleanEmail(r[emailIdx]) === email) : null;
                 const rp = rowProg || [];
                 
                 let actCompletadas = 0;
