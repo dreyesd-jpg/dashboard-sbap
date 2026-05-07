@@ -76,7 +76,7 @@
         <div class="bg-white p-10 rounded-2xl shadow-lg max-w-lg text-center">
             <svg class="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Modo Local Activo</h2>
-            <p class="text-slate-600 mb-6 text-sm">No se encontraron los archivos automáticos. Esto puede pasar si los nombres no coinciden exactamente. Usa el botón para subirlos manualmente.</p>
+            <p class="text-slate-600 mb-6 text-sm">No se encontraron los archivos automáticos o estás desde tu computadora. Usa el botón para subirlos manualmente.</p>
             <button onclick="document.getElementById('adminModal').classList.remove('hidden-section')" class="bg-institucional-700 text-white px-6 py-3 rounded-lg font-medium hover:bg-institucional-900 transition-all">
                 Cargar Archivos Manualmente
             </button>
@@ -86,7 +86,6 @@
     <!-- CONTENIDO -->
     <main id="dashboardContent" class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full hidden-section">
         
-        <!-- 3 BOTONES DE NAVEGACIÓN -->
         <nav class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <button onclick="switchTab('participantes')" id="tab-participantes" class="tab-btn active flex flex-col items-center justify-center py-5 px-6 bg-white border-2 border-slate-200 rounded-2xl shadow-sm hover:border-institucional-500 transition-all text-slate-600">
                 <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
@@ -239,7 +238,7 @@
                 </button>
             </div>
             <div class="p-8 space-y-6">
-                <p class="text-sm text-slate-500 text-center px-4">Si la conexión automática falla, usa esta ventana para forzar la lectura.</p>
+                <p class="text-sm text-slate-500 text-center px-4">Si la conexión automática falla, usa esta ventana para forzar la lectura. Se desencriptarán los formatos ocultos de Moodle.</p>
                 
                 <div class="space-y-4">
                     <div class="p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
@@ -281,7 +280,6 @@
 
         const norm = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
         
-        // Parseo universal de texto a JSON
         const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
             Papa.parse(text, {
                 header: hasHeader,
@@ -291,32 +289,46 @@
             });
         });
 
-        // ---------------------------------------------------------------------------------
-        // CARGA EN LA NUBE CON "CACHE BUSTING" (Anti Datos Fantasma)
-        // ---------------------------------------------------------------------------------
+        // ============================================================================
+        // NUEVA LÓGICA: Desencriptar UTF-16 de Moodle para evitar datos vacíos (0)
+        // ============================================================================
+        function decodeMoodleBuffer(buffer) {
+            const view = new Uint8Array(buffer);
+            // Revisa si Moodle guardó el archivo como UTF-16LE (Little Endian)
+            if (view.length >= 2 && view[0] === 0xFF && view[1] === 0xFE) {
+                return new TextDecoder('utf-16le').decode(buffer);
+            } 
+            // Revisa si es UTF-16BE (Big Endian)
+            else if (view.length >= 2 && view[0] === 0xFE && view[1] === 0xFF) {
+                return new TextDecoder('utf-16be').decode(buffer);
+            } 
+            // Si es un CSV normal (UTF-8)
+            else {
+                return new TextDecoder('utf-8').decode(buffer);
+            }
+        }
+
+        async function fetchDecodedCSV(url) {
+            const cacheBuster = new Date().getTime(); // Truco anti-memoria caché de Github
+            const res = await fetch(`${url}?v=${cacheBuster}`);
+            if (!res.ok) throw new Error("No encontrado");
+            const buffer = await res.arrayBuffer();
+            return decodeMoodleBuffer(buffer);
+        }
+
         async function loadDataFromCloud() {
             document.getElementById('loadingState').classList.remove('hidden-section');
             
             try {
-                // Truco de Cache: Agregamos el tiempo exacto en milisegundos a la URL para forzar al navegador a descargar lo más nuevo
-                const cacheBuster = new Date().getTime(); 
-
-                const [resPart, resProg, resSurv] = await Promise.all([
-                    fetch(`participantes.csv?v=${cacheBuster}`),
-                    fetch(`progreso.csv?v=${cacheBuster}`),
-                    fetch(`encuesta.csv?v=${cacheBuster}`)
+                // Descargamos y desencriptamos los formatos de Moodle al mismo tiempo
+                const [txtPart, txtProg, txtSurv] = await Promise.all([
+                    fetchDecodedCSV('participantes.csv'),
+                    fetchDecodedCSV('progreso.csv'),
+                    fetchDecodedCSV('encuesta.csv')
                 ]);
 
-                if (!resPart.ok || !resProg.ok || !resSurv.ok) {
-                    throw new Error("Archivos no encontrados en el servidor.");
-                }
-
-                const txtPart = await resPart.text();
-                const txtProg = await resProg.text();
-                const txtSurv = await resSurv.text();
-
                 const dPart = await parseCSVText(txtPart, true);
-                const dProg = await parseCSVText(txtProg, false);
+                const dProg = await parseCSVText(txtProg, false); // header false por tabulaciones sueltas
                 const dSurv = await parseCSVText(txtSurv, true);
 
                 generarBaseGlobal(dPart, dProg, dSurv);
@@ -338,7 +350,6 @@
         // Lógica ROBUSTA: Busca columnas por palabra clave, no por coincidencia exacta
         function generarBaseGlobal(dPart, dProg, dSurv) {
             const progHeaders = dProg[0] || [];
-            // Busca la columna que contenga la palabra "correo" sin importar los tildes
             const emailIdx = progHeaders.findIndex(h => h && typeof h === 'string' && h.toLowerCase().includes('correo'));
             
             let actividades = [];
@@ -348,14 +359,12 @@
                 }
             });
 
-            // Buscadores dinámicos para Participantes (Por si Moodle cambia los nombres)
             const pKeys = dPart.length > 0 ? Object.keys(dPart[0]) : [];
             const pNameKey = pKeys.find(k => k && k.toLowerCase().includes('nombre'));
             const pLastNameKey = pKeys.find(k => k && k.toLowerCase().includes('apellido'));
             const pEmailKey = pKeys.find(k => k && k.toLowerCase().includes('correo'));
             const pGroupKey = pKeys.find(k => k && k.toLowerCase().includes('grupo'));
 
-            // Buscadores dinámicos para Encuesta
             const sKeys = dSurv.length > 0 ? Object.keys(dSurv[0]) : [];
             const sNameKey = sKeys.find(k => k && (k.toLowerCase().includes('nombre completo') || k.toLowerCase() === 'nombre'));
 
@@ -434,19 +443,20 @@
             }
 
             msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-blue-50 text-blue-700 border-blue-200 block";
-            msg.innerText = "Analizando y cruzando datos...";
+            msg.innerText = "Desencriptando y cruzando datos...";
 
             try {
-                const readFile = file => new Promise((resolve, reject) => {
+                // Función que decodifica Moodle al subir manual
+                const readFileToDecodedText = file => new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onload = e => resolve(e.target.result);
+                    reader.onload = e => resolve(decodeMoodleBuffer(e.target.result));
                     reader.onerror = e => reject(e);
-                    reader.readAsText(file);
+                    reader.readAsArrayBuffer(file);
                 });
 
-                const txtPart = await readFile(f1);
-                const txtProg = await readFile(f2);
-                const txtSurv = await readFile(f3);
+                const txtPart = await readFileToDecodedText(f1);
+                const txtProg = await readFileToDecodedText(f2);
+                const txtSurv = await readFileToDecodedText(f3);
 
                 const dPart = await parseCSVText(txtPart, true);
                 const dProg = await parseCSVText(txtProg, false);
@@ -548,7 +558,6 @@
                 const enc = p.encuesta;
                 if (enc && Object.keys(enc).length > 0) {
                     qKeys.forEach(q => {
-                        // Lógica ultra robusta para encuestas: Encuentra la columna que EMPIECE con Q02 (incluso si Moodle le cambia el texto después)
                         const actualKey = Object.keys(enc).find(k => k && k.startsWith(q));
                         
                         if(actualKey && enc[actualKey] && enc[actualKey].trim() !== '') {
@@ -558,7 +567,6 @@
                         }
                     });
 
-                    // Lo mismo para el Q11
                     const q11Key = Object.keys(enc).find(k => k && k.startsWith('Q11'));
                     if(q11Key && enc[q11Key] && enc[q11Key].trim() !== '') {
                         comentariosHtml += `
@@ -625,7 +633,6 @@
             `;
         }
 
-        // Navegación y Buscadores
         function switchTab(tabId) {
             document.getElementById('sec-participantes').classList.add('hidden-section');
             document.getElementById('sec-actividad').classList.add('hidden-section');
@@ -647,11 +654,9 @@
             renderActividad(globalData.filter(p => norm(p.nombre).includes(txt)));
         });
 
-        // Eventos Admin Manual
         document.getElementById('btnAdmin').addEventListener('click', () => document.getElementById('adminModal').classList.remove('hidden-section'));
         document.getElementById('btnProcesar').addEventListener('click', procesarArchivosManuales);
 
-        // ¡EL INICIO AUTOMÁTICO SE ACTIVA AQUÍ!
         window.onload = loadDataFromCloud;
 
     </script>
