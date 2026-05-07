@@ -51,7 +51,7 @@
     <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <img src="https://files.catbox.moe/rl7xn6.png" alt="Logo" class="h-14 object-contain">
+                <img src="https://files.catbox.moe/rl7xn6.png" alt="Logo" class="h-14 object-contain" onerror="this.src='https://via.placeholder.com/150x50?text=LOGO'">
                 <div>
                     <h1 class="text-xl font-bold text-institucional-900 leading-tight">Introducción al financiamiento<br><span class="text-sm font-normal text-slate-500">de áreas protegidas</span></h1>
                 </div>
@@ -67,7 +67,7 @@
     <div id="loadingState" class="flex-1 flex flex-col items-center justify-center p-8 hidden-section">
         <div class="flex flex-col items-center gap-4">
             <svg class="animate-spin h-10 w-10 text-institucional-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            <p class="text-slate-600 font-bold animate-pulse">Sincronizando datos con el servidor...</p>
+            <p class="text-slate-600 font-bold animate-pulse">Sincronizando datos en vivo...</p>
         </div>
     </div>
 
@@ -76,7 +76,7 @@
         <div class="bg-white p-10 rounded-2xl shadow-lg max-w-lg text-center">
             <svg class="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Modo Local Activo</h2>
-            <p class="text-slate-600 mb-6 text-sm">No se encontraron archivos automáticos (esto es normal si estás probando en tu PC sin servidor). Usa el botón para subir los CSV manualmente.</p>
+            <p class="text-slate-600 mb-6 text-sm">No se encontraron los archivos automáticos. Esto puede pasar si los nombres no coinciden exactamente. Usa el botón para subirlos manualmente.</p>
             <button onclick="document.getElementById('adminModal').classList.remove('hidden-section')" class="bg-institucional-700 text-white px-6 py-3 rounded-lg font-medium hover:bg-institucional-900 transition-all">
                 Cargar Archivos Manualmente
             </button>
@@ -182,7 +182,7 @@
                 </div>
             </div>
 
-            <!-- Tabla de Avance Individual (Limpia, sin tooltip) -->
+            <!-- Tabla de Avance Individual (Limpia) -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[55vh]">
                 <div class="p-5 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                     <h3 class="text-lg font-bold text-slate-800">Detalle de Progreso por Alumno</h3>
@@ -239,7 +239,7 @@
                 </button>
             </div>
             <div class="p-8 space-y-6">
-                <p class="text-sm text-slate-500 text-center px-4">Si la conexión con la nube falla, puedes previsualizar los datos subiéndolos manualmente aquí. Esto NO se guardará en internet.</p>
+                <p class="text-sm text-slate-500 text-center px-4">Si la conexión automática falla, usa esta ventana para forzar la lectura.</p>
                 
                 <div class="space-y-4">
                     <div class="p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
@@ -281,7 +281,7 @@
 
         const norm = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
         
-        // Función general para parsear texto a JSON usando PapaParse
+        // Parseo universal de texto a JSON
         const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
             Papa.parse(text, {
                 header: hasHeader,
@@ -292,72 +292,83 @@
         });
 
         // ---------------------------------------------------------------------------------
-        // NUEVA LÓGICA MÁGICA: Carga automática de los 3 CSV desde la nube
+        // CARGA EN LA NUBE CON "CACHE BUSTING" (Anti Datos Fantasma)
         // ---------------------------------------------------------------------------------
         async function loadDataFromCloud() {
             document.getElementById('loadingState').classList.remove('hidden-section');
             
             try {
-                // Hacemos las 3 llamadas al mismo tiempo para que sea rapidísimo
+                // Truco de Cache: Agregamos el tiempo exacto en milisegundos a la URL para forzar al navegador a descargar lo más nuevo
+                const cacheBuster = new Date().getTime(); 
+
                 const [resPart, resProg, resSurv] = await Promise.all([
-                    fetch('participantes.csv'),
-                    fetch('progreso.csv'),
-                    fetch('encuesta.csv')
+                    fetch(`participantes.csv?v=${cacheBuster}`),
+                    fetch(`progreso.csv?v=${cacheBuster}`),
+                    fetch(`encuesta.csv?v=${cacheBuster}`)
                 ]);
 
-                // Si alguno falla (no lo encuentra), lanzamos un error que nos lleva al plan manual
                 if (!resPart.ok || !resProg.ok || !resSurv.ok) {
                     throw new Error("Archivos no encontrados en el servidor.");
                 }
 
-                // Extraemos el texto de los archivos
                 const txtPart = await resPart.text();
                 const txtProg = await resProg.text();
                 const txtSurv = await resSurv.text();
 
-                // Convertimos el texto a datos manejables
                 const dPart = await parseCSVText(txtPart, true);
                 const dProg = await parseCSVText(txtProg, false);
                 const dSurv = await parseCSVText(txtSurv, true);
 
-                // Procesamos todo con la lógica de cruce de Moodle
                 generarBaseGlobal(dPart, dProg, dSurv);
 
-                // Ocultamos el spinner de carga y mostramos el panel
                 document.getElementById('loadingState').classList.add('hidden-section');
                 document.getElementById('dashboardContent').classList.remove('hidden-section');
                 
-                // Dibujamos todo
                 renderParticipantes(globalData);
                 renderActividad(globalData);
                 renderEncuesta(globalData);
 
             } catch (error) {
-                console.warn("Falla en carga automática (esto es normal si abres el archivo en modo local sin servidor): ", error);
-                // Si falla, mostramos la pantalla de emergencia
+                console.warn("Modo local activado", error);
                 document.getElementById('loadingState').classList.add('hidden-section');
                 document.getElementById('emptyState').classList.remove('hidden-section');
             }
         }
 
-        // Lógica de cruce y limpieza que se reutiliza para carga manual y automática
+        // Lógica ROBUSTA: Busca columnas por palabra clave, no por coincidencia exacta
         function generarBaseGlobal(dPart, dProg, dSurv) {
             const progHeaders = dProg[0] || [];
-            const emailIdx = progHeaders.findIndex(h => h.toLowerCase().includes('correo'));
+            // Busca la columna que contenga la palabra "correo" sin importar los tildes
+            const emailIdx = progHeaders.findIndex(h => h && typeof h === 'string' && h.toLowerCase().includes('correo'));
             
             let actividades = [];
             progHeaders.forEach((h, i) => {
-                if (h && h.trim() !== '' && !h.toLowerCase().includes('correo') && !h.toLowerCase().includes('nombre') && !h.toLowerCase().includes('apellido')) {
+                if (h && typeof h === 'string' && h.trim() !== '' && !h.toLowerCase().includes('correo') && !h.toLowerCase().includes('nombre') && !h.toLowerCase().includes('apellido')) {
                     actividades.push({ nombre: h.trim(), idxEstado: i, idxFecha: i + 1 });
                 }
             });
 
+            // Buscadores dinámicos para Participantes (Por si Moodle cambia los nombres)
+            const pKeys = dPart.length > 0 ? Object.keys(dPart[0]) : [];
+            const pNameKey = pKeys.find(k => k && k.toLowerCase().includes('nombre'));
+            const pLastNameKey = pKeys.find(k => k && k.toLowerCase().includes('apellido'));
+            const pEmailKey = pKeys.find(k => k && k.toLowerCase().includes('correo'));
+            const pGroupKey = pKeys.find(k => k && k.toLowerCase().includes('grupo'));
+
+            // Buscadores dinámicos para Encuesta
+            const sKeys = dSurv.length > 0 ? Object.keys(dSurv[0]) : [];
+            const sNameKey = sKeys.find(k => k && (k.toLowerCase().includes('nombre completo') || k.toLowerCase() === 'nombre'));
+
             globalData = dPart.map(p => {
-                const email = p['Dirección de correo'] ? p['Dirección de correo'].toLowerCase().trim() : '';
-                const fullName = `${p['Nombre'] || ''} ${p['Apellido(s)'] || ''}`.trim();
+                const email = pEmailKey && p[pEmailKey] ? p[pEmailKey].toLowerCase().trim() : '';
+                const n = pNameKey && p[pNameKey] ? p[pNameKey] : '';
+                const ln = pLastNameKey && p[pLastNameKey] ? p[pLastNameKey] : '';
+                const fullName = `${n} ${ln}`.trim();
                 const nName = norm(fullName);
 
-                const rowProg = dProg.find(r => r[emailIdx] && r[emailIdx].toLowerCase().trim() === email) || [];
+                // Cruce de progreso
+                const rowProg = emailIdx >= 0 ? dProg.find(r => r[emailIdx] && r[emailIdx].toLowerCase().trim() === email) : null;
+                const rp = rowProg || [];
                 
                 let actCompletadas = 0;
                 let certificado = false;
@@ -365,8 +376,8 @@
                 let lastDateStr = 'Sin acceso registrado';
 
                 actividades.forEach(act => {
-                    const estado = rowProg[act.idxEstado] ? rowProg[act.idxEstado].trim().toLowerCase() : '';
-                    const fechaStr = rowProg[act.idxFecha] ? rowProg[act.idxFecha].trim() : '';
+                    const estado = rp[act.idxEstado] ? rp[act.idxEstado].trim().toLowerCase() : '';
+                    const fechaStr = rp[act.idxFecha] ? rp[act.idxFecha].trim() : '';
 
                     let isCompleted = false;
                     if (fechaStr !== '') {
@@ -391,12 +402,16 @@
                     }
                 });
 
-                const rowSurv = dSurv.find(s => s['Nombre completo'] && norm(s['Nombre completo']) === nName) || {};
+                // Cruce de encuesta
+                const rowSurv = dSurv.find(s => {
+                    const sn = sNameKey && s[sNameKey] ? norm(s[sNameKey]) : '';
+                    return sn === nName;
+                }) || {};
 
                 return {
                     nombre: fullName,
                     correo: email,
-                    grupo: p['Grupos'] || '-',
+                    grupo: pGroupKey && p[pGroupKey] ? p[pGroupKey] : '-',
                     ultimoAcceso: lastDateStr,
                     totalActividades: actividades.length,
                     actCompletadas: actCompletadas,
@@ -406,7 +421,6 @@
             });
         }
 
-        // Carga Manual (Respaldo)
         async function procesarArchivosManuales() {
             const f1 = document.getElementById('fPart').files[0];
             const f2 = document.getElementById('fProg').files[0];
@@ -423,7 +437,6 @@
             msg.innerText = "Analizando y cruzando datos...";
 
             try {
-                // Función auxiliar para leer archivo local a texto
                 const readFile = file => new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = e => resolve(e.target.result);
@@ -460,7 +473,6 @@
             }
         }
 
-        // Renderizadores
         function renderParticipantes(data) {
             const tb = document.getElementById('tbodyParticipantes');
             tb.innerHTML = '';
@@ -536,17 +548,22 @@
                 const enc = p.encuesta;
                 if (enc && Object.keys(enc).length > 0) {
                     qKeys.forEach(q => {
-                        if(enc[q] && enc[q].trim() !== '') {
-                            let resp = enc[q].includes(':') ? enc[q].split(':')[1].trim() : enc[q].trim();
+                        // Lógica ultra robusta para encuestas: Encuentra la columna que EMPIECE con Q02 (incluso si Moodle le cambia el texto después)
+                        const actualKey = Object.keys(enc).find(k => k && k.startsWith(q));
+                        
+                        if(actualKey && enc[actualKey] && enc[actualKey].trim() !== '') {
+                            let resp = enc[actualKey].includes(':') ? enc[actualKey].split(':')[1].trim() : enc[actualKey].trim();
                             resp = resp.replace('}', ''); 
                             qDataMap[q][resp] = (qDataMap[q][resp] || 0) + 1;
                         }
                     });
 
-                    if(enc['Q11'] && enc['Q11'].trim() !== '') {
+                    // Lo mismo para el Q11
+                    const q11Key = Object.keys(enc).find(k => k && k.startsWith('Q11'));
+                    if(q11Key && enc[q11Key] && enc[q11Key].trim() !== '') {
                         comentariosHtml += `
                             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-[6px] border-l-institucional-700 transform hover:scale-[1.01] transition-all">
-                                <p class="text-slate-800 italic text-sm leading-relaxed mb-4">"${enc['Q11']}"</p>
+                                <p class="text-slate-800 italic text-sm leading-relaxed mb-4">"${enc[q11Key]}"</p>
                                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">— ${p.nombre}</p>
                             </div>
                         `;
