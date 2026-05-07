@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Financiamiento de Áreas Protegidas</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        institucional: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            700: '#15803d', 
+                            900: '#14532d', 
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .tab-btn.active {
+            background-color: #15803d;
+            color: white;
+            border-color: #15803d;
+        }
+        .tab-btn.active svg { color: white; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .hidden-section { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans">
+
+    <!-- HEADER INSTITUCIONAL -->
+    <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <img src="https://files.catbox.moe/rl7xn6.png" alt="Logo" class="h-14 object-contain">
+                <div>
+                    <h1 class="text-xl font-bold text-institucional-900 leading-tight">Introducción al financiamiento<br><span class="text-sm font-normal text-slate-500">de áreas protegidas</span></h1>
+                </div>
+            </div>
+            
+            <button id="btnAdmin" class="p-2 rounded-full text-slate-400 hover:text-institucional-700 hover:bg-slate-100 transition-colors" title="Subida Manual (Emergencia)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ESTADO DE CARGA (AUTOMÁTICA) -->
+    <div id="loadingState" class="flex-1 flex flex-col items-center justify-center p-8 hidden-section">
+        <div class="flex flex-col items-center gap-4">
+            <svg class="animate-spin h-10 w-10 text-institucional-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <p class="text-slate-600 font-bold animate-pulse">Sincronizando datos con el servidor...</p>
+        </div>
+    </div>
+
+    <!-- ESTADO VACÍO (Si falla la carga automática) -->
+    <div id="emptyState" class="flex-1 flex flex-col items-center justify-center p-8 hidden-section">
+        <div class="bg-white p-10 rounded-2xl shadow-lg max-w-lg text-center">
+            <svg class="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">Modo Local Activo</h2>
+            <p class="text-slate-600 mb-6 text-sm">No se encontraron archivos automáticos (esto es normal si estás probando en tu PC sin servidor). Usa el botón para subir los CSV manualmente.</p>
+            <button onclick="document.getElementById('adminModal').classList.remove('hidden-section')" class="bg-institucional-700 text-white px-6 py-3 rounded-lg font-medium hover:bg-institucional-900 transition-all">
+                Cargar Archivos Manualmente
+            </button>
+        </div>
+    </div>
+
+    <!-- CONTENIDO -->
+    <main id="dashboardContent" class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full hidden-section">
+        
+        <!-- 3 BOTONES DE NAVEGACIÓN -->
+        <nav class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <button onclick="switchTab('participantes')" id="tab-participantes" class="tab-btn active flex flex-col items-center justify-center py-5 px-6 bg-white border-2 border-slate-200 rounded-2xl shadow-sm hover:border-institucional-500 transition-all text-slate-600">
+                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <span class="font-bold text-xl">Participantes</span>
+                <span class="text-xs font-normal opacity-70">Directorio y accesos</span>
+            </button>
+            <button onclick="switchTab('actividad')" id="tab-actividad" class="tab-btn flex flex-col items-center justify-center py-5 px-6 bg-white border-2 border-slate-200 rounded-2xl shadow-sm hover:border-institucional-500 transition-all text-slate-600">
+                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path></svg>
+                <span class="font-bold text-xl">Actividad en el Curso</span>
+                <span class="text-xs font-normal opacity-70">Módulos y certificados</span>
+            </button>
+            <button onclick="switchTab('encuesta')" id="tab-encuesta" class="tab-btn flex flex-col items-center justify-center py-5 px-6 bg-white border-2 border-slate-200 rounded-2xl shadow-sm hover:border-institucional-500 transition-all text-slate-600">
+                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                <span class="font-bold text-xl">Encuesta de Satisfacción</span>
+                <span class="text-xs font-normal opacity-70">Resultados y comentarios</span>
+            </button>
+        </nav>
+
+        <!-- SECCIÓN 1: PARTICIPANTES -->
+        <div id="sec-participantes" class="flex flex-col gap-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-5 border-l-4 border-l-institucional-500">
+                    <div class="p-3 bg-institucional-50 rounded-xl text-institucional-700 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-xs font-black text-slate-400 uppercase tracking-widest">Accesos Totales</p>
+                        <p id="sum-accesos" class="text-3xl font-bold text-slate-800">0</p>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-5 border-l-4 border-l-red-500">
+                    <div class="p-3 bg-red-50 rounded-xl text-red-600 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.268 17c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-xs font-black text-slate-400 uppercase tracking-widest">Estudiantes sin acceso</p>
+                        <p id="sum-sin-acceso" class="text-3xl font-bold text-slate-800">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[60vh]">
+                <div class="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800">Directorio de Alumnos</h3>
+                        <p class="text-sm text-slate-500 italic">Consulta rápida de datos de contacto y actividad.</p>
+                    </div>
+                    <div class="relative w-full sm:w-80">
+                        <input type="text" id="searchParticipantes" placeholder="Buscar por nombre o correo..." class="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-institucional-500 focus:border-transparent transition-all">
+                        <svg class="w-5 h-5 text-slate-400 absolute left-4 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                </div>
+                <div class="overflow-auto flex-1 p-0">
+                    <table class="min-w-full text-left text-sm whitespace-nowrap">
+                        <thead class="uppercase tracking-widest border-b-2 border-slate-200 bg-white text-slate-500 sticky top-0 font-black z-10">
+                            <tr>
+                                <th class="px-6 py-5">Nombre Completo</th>
+                                <th class="px-6 py-5">Correo Electrónico</th>
+                                <th class="px-6 py-5 text-center">Grupo</th>
+                                <th class="px-6 py-5">Último Acceso Registrado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyParticipantes" class="divide-y divide-slate-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: ACTIVIDAD EN EL CURSO -->
+        <div id="sec-actividad" class="hidden-section flex flex-col gap-6 h-full">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-7 flex items-center gap-5">
+                    <div class="p-3.5 bg-slate-100 rounded-2xl text-slate-600"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
+                    <div>
+                        <p class="text-xs font-black text-slate-400 uppercase tracking-widest">Total Alumnos</p>
+                        <p id="kpi-total" class="text-4xl font-black text-slate-800 tracking-tighter">0</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-7 flex items-center gap-5">
+                    <div class="p-3.5 bg-institucional-50 rounded-2xl text-institucional-700"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                    <div>
+                        <p class="text-xs font-black text-slate-400 uppercase tracking-widest">Certificados</p>
+                        <p id="kpi-certificados" class="text-4xl font-black text-institucional-700 tracking-tighter">0</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-7 flex items-center gap-5">
+                    <div class="p-3.5 bg-blue-50 rounded-2xl text-blue-600"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div>
+                    <div>
+                        <p class="text-xs font-black text-slate-400 uppercase tracking-widest">Tasa Finalización</p>
+                        <p id="kpi-tasa" class="text-4xl font-black text-blue-600 tracking-tighter">0%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de Avance Individual (Limpia, sin tooltip) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[55vh]">
+                <div class="p-5 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-slate-800">Detalle de Progreso por Alumno</h3>
+                    <input type="text" id="searchActividad" placeholder="Buscar alumno..." class="w-72 px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-institucional-500 transition-all">
+                </div>
+                <div class="overflow-auto flex-1 p-0">
+                    <table class="min-w-full text-left text-sm whitespace-nowrap">
+                        <thead class="uppercase tracking-widest border-b-2 border-slate-200 bg-white text-slate-500 sticky top-0 font-black z-20">
+                            <tr>
+                                <th class="px-6 py-5">Nombre Completo</th>
+                                <th class="px-6 py-5">Recursos</th>
+                                <th class="px-6 py-5">Avance Visual</th>
+                                <th class="px-6 py-5 text-center">Estado Final</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyActividad" class="divide-y divide-slate-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 3: ENCUESTA -->
+        <div id="sec-encuesta" class="hidden-section flex flex-col gap-8">
+            <div class="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 class="text-2xl font-bold text-slate-800 mb-2">Análisis Cualitativo y Cuantitativo</h3>
+                <p class="text-sm text-slate-500 leading-relaxed max-w-2xl">Resultados detallados de la encuesta de satisfacción aplicada al cierre del curso, organizada por los objetivos de evaluación institucional.</p>
+            </div>
+            
+            <div id="encuestaGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-6 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-slate-800">Sugerencias y Comentarios (Q11)</h3>
+                    <span class="text-xs font-bold text-institucional-700 bg-institucional-50 px-3 py-1 rounded-full uppercase">Feedback Abierto</span>
+                </div>
+                <div class="p-8 bg-slate-50 h-[500px] overflow-y-auto space-y-6" id="comentariosContainer">
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- PANEL ADMIN CARGA CSV (Solo de emergencia) -->
+    <div id="adminModal" class="fixed inset-0 bg-slate-900 bg-opacity-70 z-50 hidden-section flex items-center justify-center p-4 backdrop-blur-md transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
+            <div class="bg-slate-800 px-8 py-5 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white flex items-center gap-3">
+                    <svg class="w-6 h-6 text-institucional-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Carga Manual de Emergencia
+                </h2>
+                <button onclick="document.getElementById('adminModal').classList.add('hidden-section')" class="text-slate-400 hover:text-white transition-colors">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-8 space-y-6">
+                <p class="text-sm text-slate-500 text-center px-4">Si la conexión con la nube falla, puedes previsualizar los datos subiéndolos manualmente aquí. Esto NO se guardará en internet.</p>
+                
+                <div class="space-y-4">
+                    <div class="p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                        <p class="text-sm font-bold text-slate-700 mb-2">1. Listado de Participantes</p>
+                        <input type="file" id="fPart" accept=".csv" class="text-xs w-full cursor-pointer">
+                    </div>
+                    <div class="p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                        <p class="text-sm font-bold text-slate-700 mb-2">2. Informe de Actividad (Progreso)</p>
+                        <input type="file" id="fProg" accept=".csv" class="text-xs w-full cursor-pointer">
+                    </div>
+                    <div class="p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                        <p class="text-sm font-bold text-slate-700 mb-2">3. Encuesta de Satisfacción</p>
+                        <input type="file" id="fSurv" accept=".csv" class="text-xs w-full cursor-pointer">
+                    </div>
+                </div>
+                <div id="statusMsg" class="hidden-section p-4 rounded-xl text-sm font-bold text-center border"></div>
+                <button id="btnProcesar" class="w-full bg-institucional-700 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-institucional-900 transition-all">
+                    PROCESAR DATOS MANUALMENTE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let globalData = [];
+        let chartInstances = {};
+
+        const questionTexts = {
+            'Q02': 'Nivel general de satisfacción con el curso',
+            'Q03': 'El curso cumplió con tus expectativas iniciales',
+            'Q04': 'Nivel de claridad de los contenidos',
+            'Q05': 'Utilidad del curso para tu contexto personal o laboral',
+            'Q06': 'Nivel de comprensión de la materia (SBAP) tras el curso',
+            'Q07': '¿Crees que podrás aplicar lo aprendido?',
+            'Q08': 'El curso fortaleció tu interés en la gestión de áreas protegidas',
+            'Q09': '¿Recomendarías este curso a otras personas?',
+            'Q10': '¿Te interesaría profundizar en cursos más avanzados?'
+        };
+
+        const norm = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+        
+        // Función general para parsear texto a JSON usando PapaParse
+        const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
+            Papa.parse(text, {
+                header: hasHeader,
+                skipEmptyLines: true,
+                complete: res => resolve(res.data),
+                error: err => reject(err)
+            });
+        });
+
+        // ---------------------------------------------------------------------------------
+        // NUEVA LÓGICA MÁGICA: Carga automática de los 3 CSV desde la nube
+        // ---------------------------------------------------------------------------------
+        async function loadDataFromCloud() {
+            document.getElementById('loadingState').classList.remove('hidden-section');
+            
+            try {
+                // Hacemos las 3 llamadas al mismo tiempo para que sea rapidísimo
+                const [resPart, resProg, resSurv] = await Promise.all([
+                    fetch('participantes.csv'),
+                    fetch('progreso.csv'),
+                    fetch('encuesta.csv')
+                ]);
+
+                // Si alguno falla (no lo encuentra), lanzamos un error que nos lleva al plan manual
+                if (!resPart.ok || !resProg.ok || !resSurv.ok) {
+                    throw new Error("Archivos no encontrados en el servidor.");
+                }
+
+                // Extraemos el texto de los archivos
+                const txtPart = await resPart.text();
+                const txtProg = await resProg.text();
+                const txtSurv = await resSurv.text();
+
+                // Convertimos el texto a datos manejables
+                const dPart = await parseCSVText(txtPart, true);
+                const dProg = await parseCSVText(txtProg, false);
+                const dSurv = await parseCSVText(txtSurv, true);
+
+                // Procesamos todo con la lógica de cruce de Moodle
+                generarBaseGlobal(dPart, dProg, dSurv);
+
+                // Ocultamos el spinner de carga y mostramos el panel
+                document.getElementById('loadingState').classList.add('hidden-section');
+                document.getElementById('dashboardContent').classList.remove('hidden-section');
+                
+                // Dibujamos todo
+                renderParticipantes(globalData);
+                renderActividad(globalData);
+                renderEncuesta(globalData);
+
+            } catch (error) {
+                console.warn("Falla en carga automática (esto es normal si abres el archivo en modo local sin servidor): ", error);
+                // Si falla, mostramos la pantalla de emergencia
+                document.getElementById('loadingState').classList.add('hidden-section');
+                document.getElementById('emptyState').classList.remove('hidden-section');
+            }
+        }
+
+        // Lógica de cruce y limpieza que se reutiliza para carga manual y automática
+        function generarBaseGlobal(dPart, dProg, dSurv) {
+            const progHeaders = dProg[0] || [];
+            const emailIdx = progHeaders.findIndex(h => h.toLowerCase().includes('correo'));
+            
+            let actividades = [];
+            progHeaders.forEach((h, i) => {
+                if (h && h.trim() !== '' && !h.toLowerCase().includes('correo') && !h.toLowerCase().includes('nombre') && !h.toLowerCase().includes('apellido')) {
+                    actividades.push({ nombre: h.trim(), idxEstado: i, idxFecha: i + 1 });
+                }
+            });
+
+            globalData = dPart.map(p => {
+                const email = p['Dirección de correo'] ? p['Dirección de correo'].toLowerCase().trim() : '';
+                const fullName = `${p['Nombre'] || ''} ${p['Apellido(s)'] || ''}`.trim();
+                const nName = norm(fullName);
+
+                const rowProg = dProg.find(r => r[emailIdx] && r[emailIdx].toLowerCase().trim() === email) || [];
+                
+                let actCompletadas = 0;
+                let certificado = false;
+                let lastDateObj = new Date(0);
+                let lastDateStr = 'Sin acceso registrado';
+
+                actividades.forEach(act => {
+                    const estado = rowProg[act.idxEstado] ? rowProg[act.idxEstado].trim().toLowerCase() : '';
+                    const fechaStr = rowProg[act.idxFecha] ? rowProg[act.idxFecha].trim() : '';
+
+                    let isCompleted = false;
+                    if (fechaStr !== '') {
+                        isCompleted = true;
+                    } else if (estado !== '' && !['no finalizado', '-', 'en curso', 'vacío', ''].includes(estado)) {
+                        isCompleted = true;
+                    }
+
+                    if (isCompleted) {
+                        actCompletadas++;
+                        if (act.nombre.toLowerCase().includes('certificado')) {
+                            certificado = true;
+                        }
+                    }
+
+                    if (fechaStr !== '') {
+                        let dParse = new Date(fechaStr.replace(' ', 'T'));
+                        if (!isNaN(dParse) && dParse > lastDateObj) {
+                            lastDateObj = dParse;
+                            lastDateStr = fechaStr; 
+                        }
+                    }
+                });
+
+                const rowSurv = dSurv.find(s => s['Nombre completo'] && norm(s['Nombre completo']) === nName) || {};
+
+                return {
+                    nombre: fullName,
+                    correo: email,
+                    grupo: p['Grupos'] || '-',
+                    ultimoAcceso: lastDateStr,
+                    totalActividades: actividades.length,
+                    actCompletadas: actCompletadas,
+                    certificado: certificado,
+                    encuesta: rowSurv
+                };
+            });
+        }
+
+        // Carga Manual (Respaldo)
+        async function procesarArchivosManuales() {
+            const f1 = document.getElementById('fPart').files[0];
+            const f2 = document.getElementById('fProg').files[0];
+            const f3 = document.getElementById('fSurv').files[0];
+            const msg = document.getElementById('statusMsg');
+
+            if(!f1 || !f2 || !f3) {
+                msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-red-50 text-red-700 border-red-200 block";
+                msg.innerText = "Error: Debes cargar los 3 archivos CSV.";
+                return;
+            }
+
+            msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-blue-50 text-blue-700 border-blue-200 block";
+            msg.innerText = "Analizando y cruzando datos...";
+
+            try {
+                // Función auxiliar para leer archivo local a texto
+                const readFile = file => new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = e => reject(e);
+                    reader.readAsText(file);
+                });
+
+                const txtPart = await readFile(f1);
+                const txtProg = await readFile(f2);
+                const txtSurv = await readFile(f3);
+
+                const dPart = await parseCSVText(txtPart, true);
+                const dProg = await parseCSVText(txtProg, false);
+                const dSurv = await parseCSVText(txtSurv, true);
+
+                generarBaseGlobal(dPart, dProg, dSurv);
+
+                msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-green-50 text-green-700 border-green-200 block";
+                msg.innerText = "¡Proceso Exitoso!";
+                
+                setTimeout(() => {
+                    document.getElementById('adminModal').classList.add('hidden-section');
+                    document.getElementById('emptyState').classList.add('hidden-section');
+                    document.getElementById('dashboardContent').classList.remove('hidden-section');
+                    renderParticipantes(globalData);
+                    renderActividad(globalData);
+                    renderEncuesta(globalData);
+                }, 1000);
+
+            } catch(e) {
+                console.error(e);
+                msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-red-50 text-red-700 border-red-200 block";
+                msg.innerText = "Error crítico al procesar archivos.";
+            }
+        }
+
+        // Renderizadores
+        function renderParticipantes(data) {
+            const tb = document.getElementById('tbodyParticipantes');
+            tb.innerHTML = '';
+            
+            let accesos = 0;
+            let sinAcceso = 0;
+
+            data.forEach(p => {
+                const tieneAcceso = p.ultimoAcceso !== 'Sin acceso registrado';
+                if(tieneAcceso) accesos++; else sinAcceso++;
+
+                tb.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-bold text-slate-800">${p.nombre}</td>
+                        <td class="px-6 py-4 text-slate-500 select-all">${p.correo}</td>
+                        <td class="px-6 py-4 text-center"><span class="bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase">${p.grupo}</span></td>
+                        <td class="px-6 py-4 text-slate-400 font-mono text-xs">${p.ultimoAcceso}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('sum-accesos').innerText = accesos;
+            document.getElementById('sum-sin-acceso').innerText = sinAcceso;
+        }
+
+        function renderActividad(data) {
+            const tb = document.getElementById('tbodyActividad');
+            tb.innerHTML = '';
+            let certCount = 0;
+
+            data.forEach(p => {
+                if(p.certificado) certCount++;
+                
+                const pct = p.totalActividades > 0 ? Math.round((p.actCompletadas / p.totalActividades) * 100) : 0;
+                const barColor = pct === 100 ? 'bg-green-500' : 'bg-institucional-700';
+                
+                const certUI = p.certificado 
+                    ? `<span class="bg-institucional-100 text-institucional-800 px-4 py-1.5 rounded-full font-black text-[10px] uppercase flex items-center justify-center gap-1 w-24 mx-auto">Completado</span>`
+                    : `<span class="bg-slate-100 text-slate-400 px-4 py-1.5 rounded-full font-bold text-[10px] uppercase w-24 mx-auto block text-center italic">En curso</span>`;
+
+                tb.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-bold text-slate-800">${p.nombre}</td>
+                        <td class="px-6 py-4 text-slate-500 text-sm font-semibold">${p.actCompletadas} / ${p.totalActividades}</td>
+                        <td class="px-6 py-4 w-64">
+                            <div class="flex items-center gap-3">
+                                <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                                    <div class="${barColor} h-3 rounded-full transition-all duration-700" style="width: ${pct}%"></div>
+                                </div>
+                                <span class="text-xs font-black text-slate-600 w-12 leading-none">${pct}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">${certUI}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('kpi-total').innerText = data.length;
+            document.getElementById('kpi-certificados').innerText = certCount;
+            document.getElementById('kpi-tasa').innerText = data.length > 0 ? Math.round((certCount/data.length)*100) + '%' : '0%';
+        }
+
+        function renderEncuesta(data) {
+            const qKeys = Object.keys(questionTexts);
+            const grid = document.getElementById('encuestaGrid');
+            grid.innerHTML = '';
+            
+            let comentariosHtml = '';
+            let qDataMap = {};
+            qKeys.forEach(q => qDataMap[q] = {});
+
+            data.forEach(p => {
+                const enc = p.encuesta;
+                if (enc && Object.keys(enc).length > 0) {
+                    qKeys.forEach(q => {
+                        if(enc[q] && enc[q].trim() !== '') {
+                            let resp = enc[q].includes(':') ? enc[q].split(':')[1].trim() : enc[q].trim();
+                            resp = resp.replace('}', ''); 
+                            qDataMap[q][resp] = (qDataMap[q][resp] || 0) + 1;
+                        }
+                    });
+
+                    if(enc['Q11'] && enc['Q11'].trim() !== '') {
+                        comentariosHtml += `
+                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-[6px] border-l-institucional-700 transform hover:scale-[1.01] transition-all">
+                                <p class="text-slate-800 italic text-sm leading-relaxed mb-4">"${enc['Q11']}"</p>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">— ${p.nombre}</p>
+                            </div>
+                        `;
+                    }
+                }
+            });
+
+            const colores = ['#15803d', '#3b82f6', '#f59e0b', '#8b5cf6', '#14b8a6', '#64748b'];
+            
+            qKeys.forEach(q => {
+                const respuestas = Object.keys(qDataMap[q]);
+                if(respuestas.length > 0) {
+                    const div = document.createElement('div');
+                    div.className = "bg-white p-7 rounded-2xl shadow-sm border border-slate-200 flex flex-col hover:shadow-md transition-shadow";
+                    div.innerHTML = `
+                        <div class="mb-5">
+                            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">${q}</h4>
+                            <p class="text-sm font-black text-slate-900 leading-tight min-h-[40px]">${questionTexts[q]}</p>
+                        </div>
+                        <div class="flex-1 relative min-h-[220px]">
+                            <canvas id="chart-${q}"></canvas>
+                        </div>
+                    `;
+                    grid.appendChild(div);
+
+                    const ctx = document.getElementById(`chart-${q}`).getContext('2d');
+                    if(chartInstances[q]) chartInstances[q].destroy();
+                    
+                    chartInstances[q] = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: respuestas,
+                            datasets: [{
+                                data: Object.values(qDataMap[q]),
+                                backgroundColor: colores,
+                                borderWidth: 0,
+                                hoverOffset: 12
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '65%',
+                            plugins: {
+                                legend: { 
+                                    position: 'bottom', 
+                                    labels: { boxWidth: 8, padding: 18, usePointStyle: true, font: { size: 10, weight: '700' } } 
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('comentariosContainer').innerHTML = comentariosHtml || `
+                <div class="flex flex-col items-center justify-center h-full text-slate-400 opacity-50">
+                    <p class="italic">Aún no hay comentarios cualitativos registrados.</p>
+                </div>
+            `;
+        }
+
+        // Navegación y Buscadores
+        function switchTab(tabId) {
+            document.getElementById('sec-participantes').classList.add('hidden-section');
+            document.getElementById('sec-actividad').classList.add('hidden-section');
+            document.getElementById('sec-encuesta').classList.add('hidden-section');
+            
+            document.getElementById('sec-' + tabId).classList.remove('hidden-section');
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+
+        document.getElementById('searchParticipantes').addEventListener('keyup', e => {
+            const txt = norm(e.target.value);
+            renderParticipantes(globalData.filter(p => norm(p.nombre).includes(txt) || norm(p.correo).includes(txt)));
+        });
+        
+        document.getElementById('searchActividad').addEventListener('keyup', e => {
+            const txt = norm(e.target.value);
+            renderActividad(globalData.filter(p => norm(p.nombre).includes(txt)));
+        });
+
+        // Eventos Admin Manual
+        document.getElementById('btnAdmin').addEventListener('click', () => document.getElementById('adminModal').classList.remove('hidden-section'));
+        document.getElementById('btnProcesar').addEventListener('click', procesarArchivosManuales);
+
+        // ¡EL INICIO AUTOMÁTICO SE ACTIVA AQUÍ!
+        window.onload = loadDataFromCloud;
+
+    </script>
+</body>
+</html>
