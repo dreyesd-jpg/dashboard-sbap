@@ -43,6 +43,26 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
         .hidden-section { display: none !important; }
+        
+        /* Tooltip mejorado */
+        .tooltip-content {
+            display: none;
+            position: absolute;
+            z-index: 100;
+            left: 105%; 
+            top: 50%;
+            transform: translateY(-50%);
+            width: 300px;
+            background-color: #1e293b;
+            color: white;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+            border: 1px solid #334155;
+        }
+        .group:hover .tooltip-content {
+            display: block;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans">
@@ -55,8 +75,8 @@
                 <div>
                     <h1 class="text-xl font-bold text-institucional-900 leading-tight flex items-center">
                         Introducción al financiamiento
-                        <!-- ETIQUETA V1.4 -->
-                        <span class="bg-institucional-100 text-institucional-700 text-[10px] px-2 py-0.5 rounded-full font-black ml-3 tracking-widest border border-institucional-500 shadow-sm">v1.4</span>
+                        <!-- ETIQUETA V1.5 PARA VERIFICAR ACTUALIZACIÓN -->
+                        <span class="bg-institucional-100 text-institucional-700 text-[10px] px-2 py-0.5 rounded-full font-black ml-3 tracking-widest border border-institucional-500 shadow-sm">v1.5</span>
                     </h1>
                     <span class="text-sm font-normal text-slate-500">de áreas protegidas</span>
                 </div>
@@ -186,7 +206,7 @@
                 </div>
             </div>
 
-            <!-- Tabla de Avance Individual (Limpia) -->
+            <!-- Tabla de Avance Individual -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[55vh]">
                 <div class="p-5 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                     <h3 class="text-lg font-bold text-slate-800">Detalle de Progreso por Alumno</h3>
@@ -198,7 +218,7 @@
                             <tr>
                                 <th class="px-6 py-5">Nombre Completo</th>
                                 <th class="px-6 py-5">Recursos</th>
-                                <th class="px-6 py-5">Avance Visual</th>
+                                <th class="px-6 py-5">Avance Visual <span class="text-[10px] font-normal normal-case italic opacity-60">(Detalle al pasar mouse)</span></th>
                                 <th class="px-6 py-5 text-center">Estado Final</th>
                             </tr>
                         </thead>
@@ -230,7 +250,7 @@
         </div>
     </main>
 
-    <!-- PANEL ADMIN CARGA CSV (Solo de emergencia) -->
+    <!-- PANEL ADMIN CARGA CSV -->
     <div id="adminModal" class="fixed inset-0 bg-slate-900 bg-opacity-70 z-50 hidden-section flex items-center justify-center p-4 backdrop-blur-md transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
             <div class="bg-slate-800 px-8 py-5 flex justify-between items-center">
@@ -267,6 +287,7 @@
         </div>
     </div>
 
+    <!-- SCRIPT PRINCIPAL -->
     <script>
         let globalData = [];
         let chartInstances = {};
@@ -288,7 +309,10 @@
             return email.toLowerCase().trim().replace(/['"]+/g, '');
         };
 
-        const norm = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+        const norm = (str) => {
+            if (!str) return "";
+            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        };
         
         const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
             const delimiter = text.includes('\t') ? '\t' : ',';
@@ -297,7 +321,12 @@
                 header: hasHeader,
                 delimiter: delimiter,
                 skipEmptyLines: true,
-                transform: (value) => value.replace(/^"|"$/g, '').trim(), 
+                transform: (value) => {
+                    if (typeof value === 'string') {
+                        return value.replace(/^"|"$/g, '').trim();
+                    }
+                    return value;
+                }, 
                 complete: res => resolve(res.data),
                 error: err => reject(err)
             });
@@ -319,7 +348,7 @@
         async function fetchDecodedCSV(url) {
             const cacheBuster = new Date().getTime();
             const res = await fetch(`${url}?v=${cacheBuster}`);
-            if (!res.ok) throw new Error("No encontrado");
+            if (!res.ok) throw new Error("Archivo no encontrado: " + url);
             const buffer = await res.arrayBuffer();
             return decodeMoodleBuffer(buffer);
         }
@@ -348,7 +377,7 @@
                 renderEncuesta(globalData);
 
             } catch (error) {
-                console.warn("Modo local activado", error);
+                console.warn("Modo local activado:", error);
                 document.getElementById('loadingState').classList.add('hidden-section');
                 document.getElementById('emptyState').classList.remove('hidden-section');
             }
@@ -388,6 +417,7 @@
                 let certificado = false;
                 let lastDateObj = new Date(0);
                 let lastDateStr = 'Sin acceso registrado';
+                let detalleActividades = [];
 
                 actividades.forEach(act => {
                     const estado = rp[act.idxEstado] ? rp[act.idxEstado].trim().toLowerCase() : '';
@@ -406,6 +436,8 @@
                             certificado = true;
                         }
                     }
+
+                    detalleActividades.push({ nombre: act.nombre, completado: isCompleted });
 
                     if (fechaStr !== '') {
                         let dParse = new Date(fechaStr.replace(' ', 'T'));
@@ -429,6 +461,7 @@
                     totalActividades: actividades.length,
                     actCompletadas: actCompletadas,
                     certificado: certificado,
+                    detalleActividades: detalleActividades,
                     encuesta: rowSurv
                 };
             });
@@ -526,16 +559,28 @@
                     ? `<span class="bg-institucional-100 text-institucional-800 px-4 py-1.5 rounded-full font-black text-[10px] uppercase flex items-center justify-center gap-1 w-24 mx-auto">Completado</span>`
                     : `<span class="bg-slate-100 text-slate-400 px-4 py-1.5 rounded-full font-bold text-[10px] uppercase w-24 mx-auto block text-center italic">En curso</span>`;
 
+                const listaDetalle = p.detalleActividades.map(a => `
+                    <div class="flex justify-between items-center py-2 border-b border-slate-700 last:border-0 gap-5">
+                        <span class="truncate max-w-[200px]">${a.nombre}</span>
+                        <span class="text-sm shadow-sm">${a.completado ? '✅' : '❌'}</span>
+                    </div>
+                `).join('');
+
                 tb.innerHTML += `
                     <tr class="hover:bg-slate-50 transition-colors">
                         <td class="px-6 py-4 font-bold text-slate-800">${p.nombre}</td>
                         <td class="px-6 py-4 text-slate-500 text-sm font-semibold">${p.actCompletadas} / ${p.totalActividades}</td>
                         <td class="px-6 py-4 w-64">
-                            <div class="flex items-center gap-3">
+                            <div class="group relative flex items-center gap-3">
                                 <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
                                     <div class="${barColor} h-3 rounded-full transition-all duration-700" style="width: ${pct}%"></div>
                                 </div>
-                                <span class="text-xs font-black text-slate-600 w-12 leading-none">${pct}%</span>
+                                <span class="text-xs font-black text-slate-600 w-12 cursor-help border-b-2 border-dotted border-slate-300 leading-none">${pct}%</span>
+                                
+                                <div class="tooltip-content shadow-2xl">
+                                    <p class="font-black text-institucional-500 uppercase tracking-widest border-b border-slate-700 pb-3 mb-3 text-[10px]">Trazabilidad de Hitos</p>
+                                    <div class="space-y-0.5">${listaDetalle}</div>
+                                </div>
                             </div>
                         </td>
                         <td class="px-6 py-4">${certUI}</td>
