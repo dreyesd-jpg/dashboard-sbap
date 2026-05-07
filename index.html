@@ -75,8 +75,8 @@
                 <div>
                     <h1 class="text-xl font-bold text-institucional-900 leading-tight flex items-center">
                         Introducción al financiamiento
-                        <!-- ETIQUETA V1.5 PARA VERIFICAR ACTUALIZACIÓN -->
-                        <span class="bg-institucional-100 text-institucional-700 text-[10px] px-2 py-0.5 rounded-full font-black ml-3 tracking-widest border border-institucional-500 shadow-sm">v1.5</span>
+                        <!-- ETIQUETA V1.6 PARA VERIFICAR CACHÉ -->
+                        <span class="bg-institucional-100 text-institucional-700 text-[10px] px-2 py-0.5 rounded-full font-black ml-3 tracking-widest border border-institucional-500 shadow-sm">v1.6</span>
                     </h1>
                     <span class="text-sm font-normal text-slate-500">de áreas protegidas</span>
                 </div>
@@ -263,7 +263,7 @@
                 </button>
             </div>
             <div class="p-8 space-y-6">
-                <p class="text-sm text-slate-500 text-center px-4">Si la conexión automática falla, usa esta ventana para forzar la lectura. Se desencriptarán los formatos ocultos de Moodle.</p>
+                <p class="text-sm text-slate-500 text-center px-4">Si la conexión automática falla, usa esta ventana para forzar la lectura.</p>
                 
                 <div class="space-y-4">
                     <div class="p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
@@ -304,18 +304,22 @@
             'Q10': '¿Te interesaría profundizar en cursos más avanzados?'
         };
 
+        // LIMPIEZA DE CORREOS (Elimina caracteres invisibles y comillas raras)
         const cleanEmail = (email) => {
-            if (!email) return '';
-            return email.toLowerCase().trim().replace(/['"]+/g, '');
+            if (!email || typeof email !== 'string') return '';
+            return email.toLowerCase().replace(/[^a-z0-9@._-]/g, '').trim();
         };
 
+        // NORMALIZACIÓN DE TEXTO (Quita tildes para igualar "Ávila" con "Avila")
         const norm = (str) => {
-            if (!str) return "";
+            if (!str || typeof str !== 'string') return "";
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
         };
         
+        // PARSEADOR CSV INTELIGENTE (Detecta el Tabulador automáticamente)
         const parseCSVText = (text, hasHeader) => new Promise((resolve, reject) => {
-            const delimiter = text.includes('\t') ? '\t' : ',';
+            const firstLine = text.split('\n')[0] || '';
+            const delimiter = firstLine.includes('\t') ? '\t' : ',';
             
             Papa.parse(text, {
                 header: hasHeader,
@@ -355,7 +359,6 @@
 
         async function loadDataFromCloud() {
             document.getElementById('loadingState').classList.remove('hidden-section');
-            
             try {
                 const [txtPart, txtProg, txtSurv] = await Promise.all([
                     fetchDecodedCSV('participantes.csv'),
@@ -383,25 +386,27 @@
             }
         }
 
+        // MOTOR DE CRUCE ROBUSTO
         function generarBaseGlobal(dPart, dProg, dSurv) {
             const progHeaders = dProg[0] || [];
-            const emailIdx = progHeaders.findIndex(h => h && typeof h === 'string' && h.toLowerCase().includes('correo'));
-            
             let actividades = [];
+            
+            // Detecta dónde están las columnas de las actividades ignorando las de datos personales
             progHeaders.forEach((h, i) => {
-                if (h && typeof h === 'string' && h.trim() !== '' && !h.toLowerCase().includes('correo') && !h.toLowerCase().includes('nombre') && !h.toLowerCase().includes('apellido')) {
-                    actividades.push({ nombre: h.trim(), idxEstado: i, idxFecha: i + 1 });
+                if (h && typeof h === 'string') {
+                    const ht = norm(h);
+                    if (ht !== '' && !ht.includes('correo') && !ht.includes('nombre') && !ht.includes('apellido')) {
+                        actividades.push({ nombre: h.replace(/^"|"$/g, '').trim(), idxEstado: i, idxFecha: i + 1 });
+                    }
                 }
             });
 
+            // Detecta dinámicamente cómo se llaman las columnas en Participantes
             const pKeys = dPart.length > 0 ? Object.keys(dPart[0]) : [];
-            const pNameKey = pKeys.find(k => k && k.toLowerCase().includes('nombre'));
-            const pLastNameKey = pKeys.find(k => k && k.toLowerCase().includes('apellido'));
-            const pEmailKey = pKeys.find(k => k && k.toLowerCase().includes('correo'));
-            const pGroupKey = pKeys.find(k => k && k.toLowerCase().includes('grupo'));
-
-            const sKeys = dSurv.length > 0 ? Object.keys(dSurv[0]) : [];
-            const sNameKey = sKeys.find(k => k && (k.toLowerCase().includes('nombre completo') || k.toLowerCase() === 'nombre'));
+            const pNameKey = pKeys.find(k => k && norm(k).includes('nombre'));
+            const pLastNameKey = pKeys.find(k => k && norm(k).includes('apellido'));
+            const pEmailKey = pKeys.find(k => k && norm(k).includes('correo'));
+            const pGroupKey = pKeys.find(k => k && norm(k).includes('grupo'));
 
             globalData = dPart.map(p => {
                 const email = pEmailKey && p[pEmailKey] ? cleanEmail(p[pEmailKey]) : '';
@@ -410,8 +415,32 @@
                 const fullName = `${n} ${ln}`.trim();
                 const nName = norm(fullName);
 
-                const rowProg = emailIdx >= 0 ? dProg.find(r => r[emailIdx] && cleanEmail(r[emailIdx]) === email) : null;
-                const rp = rowProg || [];
+                // --- BÚSQUEDA A PRUEBA DE BALAS EN PROGRESO ---
+                // Revisa celda por celda en lugar de depender de una columna estática
+                let rp = [];
+                for (let i = 0; i < dProg.length; i++) {
+                    const r = dProg[i];
+                    if (!r || r.length < 2) continue; // Ignora filas vacías
+                    
+                    let isMatch = false;
+                    for (let j = 0; j < r.length; j++) {
+                        const cell = r[j];
+                        if (!cell) continue;
+                        
+                        const cEmail = cleanEmail(cell);
+                        const cNorm = norm(cell);
+                        
+                        // Si el email coincide o el nombre completo coincide, es la persona correcta
+                        if ((email && cEmail === email) || (nName && cNorm === nName)) {
+                            isMatch = true;
+                            break;
+                        }
+                    }
+                    if (isMatch) {
+                        rp = r;
+                        break;
+                    }
+                }
                 
                 let actCompletadas = 0;
                 let certificado = false;
@@ -420,26 +449,29 @@
                 let detalleActividades = [];
 
                 actividades.forEach(act => {
-                    const estado = rp[act.idxEstado] ? rp[act.idxEstado].trim().toLowerCase() : '';
-                    const fechaStr = rp[act.idxFecha] ? rp[act.idxFecha].trim() : '';
+                    const estado = rp[act.idxEstado] ? norm(rp[act.idxEstado]) : '';
+                    const fechaStr = rp[act.idxFecha] ? rp[act.idxFecha].replace(/^"|"$/g, '').trim() : '';
 
                     let isCompleted = false;
-                    if (fechaStr !== '') {
+                    // Si tiene fecha guardada en Moodle, es porque lo completó
+                    if (fechaStr !== '' && fechaStr !== '-') {
                         isCompleted = true;
-                    } else if (estado !== '' && !['no finalizado', '-', 'en curso', 'vacío', ''].includes(estado)) {
+                    } 
+                    // Si no tiene fecha, pero dice algo positivo (finalizado, aprobado)
+                    else if (estado !== '' && !['no finalizado', '-', 'en curso', 'vacio', '0', 'no'].includes(estado)) {
                         isCompleted = true;
                     }
 
                     if (isCompleted) {
                         actCompletadas++;
-                        if (act.nombre.toLowerCase().includes('certificado')) {
+                        if (norm(act.nombre).includes('certificado')) {
                             certificado = true;
                         }
                     }
 
                     detalleActividades.push({ nombre: act.nombre, completado: isCompleted });
 
-                    if (fechaStr !== '') {
+                    if (fechaStr !== '' && fechaStr !== '-') {
                         let dParse = new Date(fechaStr.replace(' ', 'T'));
                         if (!isNaN(dParse) && dParse > lastDateObj) {
                             lastDateObj = dParse;
@@ -448,10 +480,28 @@
                     }
                 });
 
-                const rowSurv = dSurv.find(s => {
-                    const sn = sNameKey && s[sNameKey] ? norm(s[sNameKey]) : '';
-                    return sn === nName;
-                }) || {};
+                // --- BÚSQUEDA A PRUEBA DE BALAS EN ENCUESTA ---
+                let rowSurv = {};
+                for (let i = 0; i < dSurv.length; i++) {
+                    const s = dSurv[i];
+                    let isMatch = false;
+                    for (let key in s) {
+                        const cell = s[key];
+                        if (!cell) continue;
+                        
+                        const cEmail = cleanEmail(cell);
+                        const cNorm = norm(cell);
+                        
+                        if ((email && cEmail === email) || (nName && cNorm === nName)) {
+                            isMatch = true;
+                            break;
+                        }
+                    }
+                    if (isMatch) {
+                        rowSurv = s;
+                        break;
+                    }
+                }
 
                 return {
                     nombre: fullName,
@@ -480,7 +530,7 @@
             }
 
             msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-blue-50 text-blue-700 border-blue-200 block";
-            msg.innerText = "Desencriptando y cruzando datos...";
+            msg.innerText = "Desencriptando y cruzando datos de Moodle...";
 
             try {
                 const readFileToDecodedText = file => new Promise((resolve, reject) => {
@@ -515,7 +565,7 @@
             } catch(e) {
                 console.error(e);
                 msg.className = "p-4 rounded-xl text-sm font-bold text-center bg-red-50 text-red-700 border-red-200 block";
-                msg.innerText = "Error crítico al procesar archivos.";
+                msg.innerText = "Error crítico al procesar archivos: " + e.message;
             }
         }
 
